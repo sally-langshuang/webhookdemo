@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      containers:
+        - name: {{ .Values.name }}
+          image: harbor.yusur.tech/yusur_cni/demo:latest
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            runAsGroup: 1009
+            runAsUser: 1009
+          command:
+            - /app/demo
+          ports:
+            - containerPort: 8443
+              name: demo
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /app
+              name: tls-certs
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: {{ .Values.secretName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  ports:
+    - name: demo
+      port: 443
+      protocol: TCP
+      targetPort: demo
+      nodePort: 30043
+  selector:
+    app: {{ .Values.name }}
+  type: NodePort

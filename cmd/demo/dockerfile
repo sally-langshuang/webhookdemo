@@ -1,0 +1,7 @@
+FROM ubuntu
+RUN groupadd -g 1009 langs \
+    && useradd -u 1009 -g 1009 langs
+WORKDIR /app
+COPY . ./
+CMD ["/app/webhookdemo"]
+
