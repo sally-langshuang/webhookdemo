@@ -1,3 +1,4 @@
+{{- if not .Values.debug }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,7 +26,7 @@ spec:
             - /app/demo
           ports:
             - containerPort: 8443
-              name: demo
+              name: mutate
               protocol: TCP
           volumeMounts:
             - mountPath: /app
@@ -51,3 +52,4 @@ spec:
   selector:
     app: {{ .Values.name }}
   type: NodePort
+{{- end }}
