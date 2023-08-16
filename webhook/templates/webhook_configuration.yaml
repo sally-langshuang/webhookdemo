@@ -1,3 +1,4 @@
+{{- if not .Values.debug}}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -9,7 +10,7 @@ webhooks:
         name: {{ .Values.name }}
         namespace: {{ .Values.namespace }}
         path: "/mutate"
-      caBundle: {{ .Files.Get "./templates/ca.crt" | b64enc }}
+      caBundle: {{ .Files.Get "caBundle" | b64enc }}
     rules:
       - operations: ["CREATE", "UPDATE"]
         apiGroups: [""]
@@ -21,4 +22,4 @@ webhooks:
     admissionReviewVersions:
       - v1
       - v1alpha1
-
+{{- end}}
