@@ -1,0 +1,23 @@
+{{- if .Values.debug }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutate
+webhooks:
+  - clientConfig:
+      url: https://d174-114-255-110-35.ngrok-free.app/mutate
+      caBundle: {{ .Files.Get "ca.crt" | b64enc }}
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: {{ .Values.name }}.{{ .Values.namespace}}.svc
+    rules:
+      - operations: [ "CREATE", "UPDATE" ]
+        apiGroups: [ "" ]
+        apiVersions: [ "v1" ]
+        resources: [ "pods" ]
+    sideEffects: None
+    timeoutSeconds: 50
+    admissionReviewVersions:
+      - v1
+      - v1alpha1
+{{- end }}
