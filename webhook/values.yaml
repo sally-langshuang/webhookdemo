@@ -1,11 +1,12 @@
 # Default values for webhook.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
-secretName: demo-secret
-secretNamespace: default
-name: demo
-namespace: w
+secretName: mutate-secret
+secretNamespace: langs
+name: mutate
+namespace: langs
 replicaCount: 1
+debug: true
 
 image:
   repository: nginx
