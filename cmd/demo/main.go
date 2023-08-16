@@ -3,18 +3,26 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"gomodules.xyz/jsonpatch/v3"
 	"io/ioutil"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"log"
 	"net/http"
-	"os"
-	"strings"
-
-	"gomodules.xyz/jsonpatch/v3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+)
+
+var (
+	resourceName    corev1.ResourceName = "yusur.tech/sriov_netdevice"
+	filterKey                           = "yusur-network"
+	filterVal                           = "true"
+	multiCniAnnoKey                     = "k8s.v1.cni.cncf.io/networks"
+	multiCniAnnoVal                     = "kube-system/yusur-cni-net@dpuvf"
+	quatity                             = "1"
 )
 
 type AdmissionReview struct {
@@ -32,26 +40,41 @@ type AdmissionResponse struct {
 }
 
 func main() {
-	// 加载TLS证书
-	cert, err := tls.LoadX509KeyPair("webhook.crt", "webhook.key")
-	if err != nil {
-		log.Fatalf("Failed to load key pair: %v", err)
-	}
-
+	var isTls bool
+	flag.BoolVar(&isTls, "tls", false, "enable tls")
+	flag.Parse()
 	server := &http.Server{
 		Addr: ":8443",
-		TLSConfig: &tls.Config{
+	}
+	http.HandleFunc("/mutate", mutateHandler)
+	http.HandleFunc("/sms", smsHandler)
+
+	if isTls {
+		// 加载TLS证书
+		cert, err := tls.LoadX509KeyPair("webhook.crt", "webhook.key")
+		if err != nil {
+			log.Fatalf("Failed to load key pair: %v", err)
+		}
+		server.TLSConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
-		},
+		}
+		err = server.ListenAndServeTLS("", "")
+		fmt.Println("Webhook server tls started")
+		if err != nil {
+			fmt.Println("==> err: ", err)
+		}
+	} else {
+		err := server.ListenAndServe()
+		if err != nil {
+			fmt.Println("==> err: ", err)
+		}
 	}
 
-	http.HandleFunc("/mutate", mutateHandler)
-	fmt.Println("Webhook server started")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
-		os.Exit(1)
-	}
-	server.ListenAndServeTLS("", "")
+}
+
+func smsHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("sms")
+	w.Write([]byte("response"))
 }
 
 func mutateHandler(w http.ResponseWriter, r *http.Request) {
@@ -79,14 +102,18 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error marshalling original pod", http.StatusInternalServerError)
 		return
 	}
+	b, ok := pod.Annotations[filterKey]
+	if ok && b == filterVal {
+		q := resource.MustParse(quatity)
+		container := pod.Spec.Containers[0]
+		container.Resources.Limits[resourceName] = q
+		container.Resources.Requests[resourceName] = q
+		pod.Annotations[multiCniAnnoKey] = multiCniAnnoVal
+	}
 	if err != nil {
 		fmt.Printf("==> err: %v\n", err)
 		http.Error(w, "Failed to unmarshal pod", http.StatusBadRequest)
 		return
-	}
-
-	if s, ok := pod.Annotations["cal"]; ok && strings.EqualFold(s, "1+1") {
-		pod.Annotations["res"] = "2"
 	}
 
 	patchedPodBytes, err := json.Marshal(pod)
@@ -122,23 +149,6 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 			Patch:     patchBytes,
 		},
 	}
-	//initContainer := corev1.Container{
-	//	Name:  "init-demo",
-	//	Image: "busybox",
-	//	Command: []string{
-	//		"/bin/sh",
-	//		"-c",
-	//		"echo 'Hello from init container!'",
-	//	},
-	//}
-	//
-	//patch := []map[string]interface{}{
-	//	{
-	//		"op":    "add",
-	//		"path":  "/spec/initContainers",
-	//		"value": []corev1.Container{initContainer},
-	//	},
-	//}
 
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
@@ -149,5 +159,27 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
 	fmt.Println("==> mutateHandler end")
+
+}
+
+func addInit() []map[string]interface{} {
+	initContainer := corev1.Container{
+		Name:  "init-demo",
+		Image: "busybox",
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			"echo 'Hello from init container!'",
+		},
+	}
+
+	patch := []map[string]interface{}{
+		{
+			"op":    "add",
+			"path":  "/spec/initContainers",
+			"value": []corev1.Container{initContainer},
+		},
+	}
+	return patch
 
 }
