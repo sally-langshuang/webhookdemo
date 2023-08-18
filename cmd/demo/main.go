@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 	"log"
 	"net/http"
 
@@ -18,7 +19,7 @@ import (
 
 var (
 	resourceName    corev1.ResourceName = "yusur.tech/sriov_netdevice"
-	filterKey                           = "yusur-network"
+	filterKey                           = "dpu.yusur.tech/status"
 	filterVal                           = "true"
 	multiCniAnnoKey                     = "k8s.v1.cni.cncf.io/networks"
 	multiCniAnnoVal                     = "kube-system/yusur-cni-net@dpuvf"
@@ -78,7 +79,7 @@ func smsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func mutateHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("==> mutateHandler")
+	klog.Info("/mutate")
 	body, err := ioutil.ReadAll(r.Body)
 
 	if err != nil {
@@ -86,7 +87,7 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	fmt.Printf("==> body: %s\n", body)
+	klog.Infof("==> body: %s\n", body)
 	ar := admissionv1.AdmissionReview{}
 
 	err = json.Unmarshal(body, &ar)
@@ -102,16 +103,24 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error marshalling original pod", http.StatusInternalServerError)
 		return
 	}
-	b, ok := pod.Annotations[filterKey]
-	if ok && b == filterVal {
-		q := resource.MustParse(quatity)
-		container := pod.Spec.Containers[0]
-		container.Resources.Limits[resourceName] = q
-		container.Resources.Requests[resourceName] = q
-		pod.Annotations[multiCniAnnoKey] = multiCniAnnoVal
+	q := resource.MustParse(quatity)
+	var container *corev1.Container
+	container = &pod.Spec.Containers[0]
+	if container.Resources.Limits == nil {
+		container.Resources.Limits = corev1.ResourceList{}
 	}
+	container.Resources.Limits[resourceName] = q
+	if container.Resources.Requests == nil {
+		container.Resources.Requests = corev1.ResourceList{}
+	}
+	container.Resources.Requests[resourceName] = q
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations[multiCniAnnoKey] = multiCniAnnoVal
+
 	if err != nil {
-		fmt.Printf("==> err: %v\n", err)
+		klog.Errorf("==> err: %v\n", err)
 		http.Error(w, "Failed to unmarshal pod", http.StatusBadRequest)
 		return
 	}
@@ -129,13 +138,13 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error creating JSON patch", http.StatusInternalServerError)
 		return
 	}
+	klog.Infof("patches: %#v", patches)
 	patchBytes, err := json.Marshal(patches)
 	if err != nil {
 		fmt.Printf("==> err: %v\n", err)
 		http.Error(w, "Error marshalling JSON patch", http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("==> patchBytes: %v\n", patchBytes)
 	pt := admissionv1.PatchTypeJSONPatch
 	resp := admissionv1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
@@ -158,7 +167,7 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(respBytes)
-	fmt.Println("==> mutateHandler end")
+	klog.Infof("==> resp: %s\n", resp)
 
 }
 
