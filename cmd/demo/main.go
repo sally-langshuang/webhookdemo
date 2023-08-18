@@ -79,7 +79,7 @@ func smsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func mutateHandler(w http.ResponseWriter, r *http.Request) {
-	klog.Info("/mutate")
+	klog.Info("/mutate\n")
 	body, err := ioutil.ReadAll(r.Body)
 
 	if err != nil {
@@ -109,15 +109,22 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 	if container.Resources.Limits == nil {
 		container.Resources.Limits = corev1.ResourceList{}
 	}
-	container.Resources.Limits[resourceName] = q
+	if _, ok := container.Resources.Limits[resourceName]; !ok {
+		container.Resources.Limits[resourceName] = q
+	}
+
 	if container.Resources.Requests == nil {
 		container.Resources.Requests = corev1.ResourceList{}
 	}
-	container.Resources.Requests[resourceName] = q
+	if _, ok := container.Resources.Requests[resourceName]; !ok {
+		container.Resources.Requests[resourceName] = q
+	}
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
-	pod.Annotations[multiCniAnnoKey] = multiCniAnnoVal
+	if pod.Annotations[multiCniAnnoKey] != multiCniAnnoVal {
+		pod.Annotations[multiCniAnnoKey] = multiCniAnnoVal
+	}
 
 	if err != nil {
 		klog.Errorf("==> err: %v\n", err)
@@ -127,21 +134,21 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 
 	patchedPodBytes, err := json.Marshal(pod)
 	if err != nil {
-		fmt.Printf("==> err: %v\n", err)
+		klog.Errorf("==> err: %v\n", err)
 		http.Error(w, "Error marshalling patched pod", http.StatusInternalServerError)
 		return
 	}
 
 	patches, err := jsonpatch.CreatePatch(ar.Request.Object.Raw, patchedPodBytes)
 	if err != nil {
-		fmt.Printf("==> err: %v\n", err)
+		klog.Errorf("==> err: %v\n", err)
 		http.Error(w, "Error creating JSON patch", http.StatusInternalServerError)
 		return
 	}
 	klog.Infof("patches: %#v", patches)
 	patchBytes, err := json.Marshal(patches)
 	if err != nil {
-		fmt.Printf("==> err: %v\n", err)
+		klog.Errorf("==> err: %v\n", err)
 		http.Error(w, "Error marshalling JSON patch", http.StatusInternalServerError)
 		return
 	}
@@ -161,7 +168,7 @@ func mutateHandler(w http.ResponseWriter, r *http.Request) {
 
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
-		fmt.Printf("==>resp json err: %v\n", err)
+		klog.Errorf("==>resp json err: %v\n", err)
 		http.Error(w, "Error ...", http.StatusInternalServerError)
 		return
 	}
