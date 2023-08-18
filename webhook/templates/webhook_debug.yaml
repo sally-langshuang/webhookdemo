@@ -55,6 +55,9 @@ webhooks:
           values:
             - "false"
     namespaceSelector:
-      matchLabels:
-        yusur.tech/dpu-auto-injection: never-match
+      matchExpressions:
+        - key: yusur.tech/dpu-auto-injection
+          operator: NotIn
+          values:
+            - enabled
 {{- end }}
